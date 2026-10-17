@@ -17,6 +17,14 @@ function createRecoveryCode() {
   return { username: `aa_${idPart.toLowerCase()}`, code: `AA-${idPart}-${secret}` }
 }
 
+function normalizeNickname(value: unknown) {
+  const name = String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ')
+  if (Array.from(name).length < 1 || Array.from(name).length > 24 || !/^[\p{L}\p{N}_ -]+$/u.test(name)) {
+    throw new InputError('昵称须为1至24位中文、字母、数字、空格、横线或下划线')
+  }
+  return { name, username: `nick:${name.toLowerCase()}` }
+}
+
 export async function GET(request: Request) {
   return json({ user: await currentUser(request) })
 }
@@ -30,6 +38,49 @@ export async function POST(request: Request) {
       const token = request.headers.get('cookie')?.split(';').map(x => x.trim()).find(x => x.startsWith('studysplit_session='))?.slice(19)
       if (token) await db().prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha256(token)).run()
       return json({ ok: true }, 200, { 'Set-Cookie': 'studysplit_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0' })
+    }
+
+    if (action === 'registerNickname' || action === 'loginNickname') {
+      const { name, username } = normalizeNickname(p.nickname)
+      const password = String(p.password || '')
+      if (password.length < 8 || password.length > 128) throw new InputError('密码须为8至128位')
+      let user: {id:string;username:string;name:string;salt:string;password_hash:string} | null
+      if (action === 'registerNickname') {
+        const id = randomId(), salt = randomToken()
+        const hash = await passwordHash(password, salt)
+        try {
+          await db().prepare('INSERT INTO users(id,username,name,salt,password_hash,created_at) VALUES(?,?,?,?,?,?)')
+            .bind(id, username, name, salt, hash, now()).run()
+        } catch (error) {
+          if (String(error).includes('UNIQUE constraint failed: users.username')) throw new InputError('这个昵称已有室友使用，请换一个，或选择登录')
+          throw error
+        }
+        user = { id, username, name, salt, password_hash: hash }
+      } else {
+        user = await db().prepare('SELECT id,username,name,salt,password_hash FROM users WHERE username=?')
+          .bind(username).first() as typeof user
+        if (!user || user.salt === recoverySalt || await passwordHash(password, user.salt) !== user.password_hash) throw new InputError('昵称或密码错误')
+      }
+      const cookie = await newSession(user.id, request)
+      return json({ user: { id: user.id, username: user.username, name: user.name } }, 200, { 'Set-Cookie': cookie })
+    }
+
+    if (action === 'upgradeNicknamePassword') {
+      const current = await currentUser(request)
+      if (!current) return json({ error: '请先登录' }, 401)
+      const { name, username } = normalizeNickname(p.nickname)
+      const password = String(p.password || '')
+      if (password.length < 8 || password.length > 128) throw new InputError('密码须为8至128位')
+      const salt = randomToken(), hash = await passwordHash(password, salt)
+      try {
+        const updated = await db().prepare('UPDATE users SET username=?,name=?,salt=?,password_hash=? WHERE id=? AND salt=?')
+          .bind(username, name, salt, hash, current.id, recoverySalt).run()
+        if (updated.meta.changes !== 1) throw new InputError('此账号已经设置过密码')
+      } catch (error) {
+        if (String(error).includes('UNIQUE constraint failed: users.username')) throw new InputError('这个昵称已有室友使用，请换一个')
+        throw error
+      }
+      return json({ user: { id: current.id, username, name } })
     }
 
     if (action === 'quickStart') {

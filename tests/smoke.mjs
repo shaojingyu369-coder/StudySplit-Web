@@ -14,15 +14,25 @@ function client() {
   }
 }
 const a=client(),b=client()
-const startedA=await a('/api/auth',{action:'quickStart',name:'小林'})
-const startedB=await b('/api/auth',{action:'quickStart',name:'小林'})
+const aliceNick='小林'+unique,bobNick='阿悦'+unique,password='shared-test-password-123'
+const startedA=await a('/api/auth',{action:'registerNickname',nickname:aliceNick,password})
+const startedB=await b('/api/auth',{action:'registerNickname',nickname:bobNick,password})
 const alice=startedA.user,bob=startedB.user
-assert.notEqual(alice.id,bob.id,'同昵称室友应获得独立身份')
-assert.match(startedA.recoveryCode,/^AA-[0-9A-F]{16}-[0-9A-F]{24}$/)
+assert.notEqual(alice.id,bob.id,'不同室友应获得独立身份')
+try{await client()('/api/auth',{action:'registerNickname',nickname:aliceNick,password});assert.fail('重复昵称不应注册')}
+catch(e){assert.match(e.message,/昵称已有室友使用/)}
 const recovered=client()
-assert.equal((await recovered('/api/auth',{action:'recover',recoveryCode:startedA.recoveryCode})).user.id,alice.id)
-try{await recovered('/api/auth',{action:'recover',recoveryCode:startedA.recoveryCode.slice(0,-1)+'Z'});assert.fail('错误登录码不应通过')}
-catch(e){assert.match(e.message,/登录码/)}
+assert.equal((await recovered('/api/auth',{action:'loginNickname',nickname:aliceNick,password})).user.id,alice.id)
+try{await client()('/api/auth',{action:'loginNickname',nickname:aliceNick,password:'wrong-password'});assert.fail('错误密码不应登录')}
+catch(e){assert.match(e.message,/昵称或密码错误/)}
+const oldCodeClient=client(),oldCode=await oldCodeClient('/api/auth',{action:'quickStart',name:'历史用户'})
+assert.equal((await client()('/api/auth',{action:'recover',recoveryCode:oldCode.recoveryCode})).user.id,oldCode.user.id)
+const upgradedNick='迁移用户'+unique
+const upgraded=await oldCodeClient('/api/auth',{action:'upgradeNicknamePassword',nickname:upgradedNick,password})
+assert.equal(upgraded.user.id,oldCode.user.id)
+assert.equal((await client()('/api/auth',{action:'loginNickname',nickname:upgradedNick,password})).user.id,oldCode.user.id)
+try{await client()('/api/auth',{action:'recover',recoveryCode:oldCode.recoveryCode});assert.fail('升级后旧登录码应失效')}
+catch(e){assert.match(e.message,/登录码无效/)}
 const created=await a('/api/ledger',{action:'createDorm',name:'测试宿舍'})
 const dormId=created.currentDormId
 await b('/api/ledger',{action:'joinDorm',code:created.dorm.code})
