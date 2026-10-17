@@ -4,7 +4,7 @@
 
 ## 在线使用
 
-正式网址：[打开留学AA](https://studysplit-shaojingyu.tastyseed8.chatgpt.site)。源码仓库：[StudySplit-Web](https://github.com/shaojingyu369-coder/StudySplit-Web)。
+打开方式：[GitHub Pages 入口](https://shaojingyu369-coder.github.io/StudySplit-Web/)（跳转至实际网站），或[直接打开留学AA](https://studysplit-shaojingyu.tastyseed8.chatgpt.site)。源码仓库：[StudySplit-Web](https://github.com/shaojingyu369-coder/StudySplit-Web)。
 
 1. 每人创建自己的账号（账号 3–24 位英文、数字或下划线；密码至少 10 位）。
 2. 一人创建宿舍，把邀请码发给室友；其他人选择“加入宿舍”。
