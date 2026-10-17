@@ -14,8 +14,15 @@ function client() {
   }
 }
 const a=client(),b=client()
-const alice=(await a('/api/auth',{action:'register',username:'alice_'+unique,password:'test-password-123',name:'小林'})).user
-const bob=(await b('/api/auth',{action:'register',username:'bob_'+unique,password:'test-password-123',name:'阿悦'})).user
+const startedA=await a('/api/auth',{action:'quickStart',name:'小林'})
+const startedB=await b('/api/auth',{action:'quickStart',name:'小林'})
+const alice=startedA.user,bob=startedB.user
+assert.notEqual(alice.id,bob.id,'同昵称室友应获得独立身份')
+assert.match(startedA.recoveryCode,/^AA-[0-9A-F]{16}-[0-9A-F]{24}$/)
+const recovered=client()
+assert.equal((await recovered('/api/auth',{action:'recover',recoveryCode:startedA.recoveryCode})).user.id,alice.id)
+try{await recovered('/api/auth',{action:'recover',recoveryCode:startedA.recoveryCode.slice(0,-1)+'Z'});assert.fail('错误登录码不应通过')}
+catch(e){assert.match(e.message,/登录码/)}
 const created=await a('/api/ledger',{action:'createDorm',name:'测试宿舍'})
 const dormId=created.currentDormId
 await b('/api/ledger',{action:'joinDorm',code:created.dorm.code})

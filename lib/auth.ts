@@ -31,7 +31,7 @@ export async function newSession(userId: string, request: Request) {
   const token = randomToken()
   const expires = new Date(Date.now() + 30 * 86400000)
   await db().prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').bind(await sha256(token), userId, expires.toISOString()).run()
-  const secure = new URL(request.url).hostname === 'localhost' ? '' : '; Secure'
+  const secure = new URL(request.url).protocol === 'http:' ? '' : '; Secure'
   return `studysplit_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000${secure}`
 }
 export function json(data: unknown, status = 200, headers: HeadersInit = {}) {
